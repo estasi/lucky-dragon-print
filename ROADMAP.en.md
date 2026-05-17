@@ -67,10 +67,179 @@ Base pipeline for TSPL:
 
 ### v2.0 — Cross-platform + automation
 
-- **Avalonia UI rewrite** — Linux and macOS support (WPF is Windows-only)
-- **Watch folder mode** — file appears in folder → automatic print (for 1C / ERP integration)
-- **HTTP webhook server** — REST API `POST /print` with JSON job description
-- **ARM64 native build** — Windows ARM + Apple Silicon
+The main goal of v2.0 is to port the utility to Linux and macOS (including Apple Silicon ARM64). Technically Windows 11 ARM64 already runs the current x64 build via emulation, but native ARM64 is preferred for performance.
+
+#### What's Windows-bound in v1.0
+
+| Component | v1.0 implementation | Non-Windows problem |
+|---|---|---|
+| UI framework | WPF | Windows-only, no port |
+| Bitmap rendering | System.Drawing.Common (GDI+) | .NET 6+ deprecated on non-Windows; works on Linux via libgdiplus with font and FPS issues |
+| Printing | P/Invoke `winspool.drv` (StartDocPrinter RAW) | Windows-only API |
+| Title bar dark | DWM `DwmSetWindowAttribute` | Windows-only |
+| File association | HKCU registry + SHChangeNotify | Windows-only |
+| Printer settings dialog | `rundll32 printui.dll /e` | Windows-only |
+| Theme auto-detect | HKCU\\...\\AppsUseLightTheme | Windows-only |
+| Installer | Inno Setup 6 | Windows-only |
+
+#### What's already cross-platform (no changes needed)
+
+- **.NET 8 runtime** — Win/Linux/macOS × x64/arm64
+- **CommunityToolkit.Mvvm** — pure .NET source generators
+- **ZXing.Net** 0.16.10 — pure .NET, no native bindings
+- **`Environment.SpecialFolder.ApplicationData`** — resolves correctly per OS: `%APPDATA%` (Win), `~/.config` (Linux XDG), `~/Library/Application Support` (macOS)
+- **JSON resource i18n** — via `Assembly.GetManifestResourceStream`
+- **TsplParser / PageRangeParser / BarcodeRenderer internals** — pure C#
+
+This means ~50% of the codebase (business logic) ports without changes. Only the UI + system integration layer needs work.
+
+#### Layer 1 — UI framework: WPF → Avalonia 11
+
+**Why Avalonia, not MAUI:**
+- Avalonia 11 = single codebase for Win + Mac + Linux + iOS + Android + WebAssembly
+- XAML + MVVM — minimal migration from WPF (close mental model)
+- ARM64 native on all platforms
+- MAUI Linux is community-only (Uno / GtkSharp), not Microsoft-supported
+
+**Changes:** `MainWindow.xaml`, `Themes/{Light,Dark,Controls}.xaml`, `App.xaml`, custom ControlTemplates.
+
+**Unchanged:** `ViewModels/*` (`CommunityToolkit.Mvvm` compatible 1:1), `Models/*`, pure-C# services.
+
+**Effort:** 1.5–2 weeks.
+
+#### Layer 2 — Rendering: System.Drawing → SkiaSharp
+
+`System.Drawing.Common` is marked `[SupportedOSPlatform("windows")]` since .NET 6. On Linux it goes through libgdiplus — slow with TTF issues.
+
+**Replacement:** SkiaSharp 2.x — Google's Skia engine (same one in Chrome, Flutter, Android). Native binaries for all platforms × x64/arm64. HarfBuzz for TTF/OTF on every OS.
+
+**Changes:**
+- `TsplRenderer.cs`: `Graphics` → `SKCanvas`, `Bitmap` → `SKBitmap`/`SKImage`
+- `BarcodeRenderer.cs`: switch to `ZXing.Net.Bindings.SkiaSharp`
+- `SKBitmap` → Avalonia `IBitmap` conversion for display
+
+**Effort:** 3–5 days.
+
+#### Layer 3 — Printing: IPrinterService abstraction
+
+```csharp
+public interface IPrinterService {
+    IEnumerable<string> GetInstalledPrinters();
+    Task PrintRawAsync(string printerName, byte[] data, string docName);
+    Task OpenPrinterPropertiesAsync(string printerName);
+}
+```
+
+**Implementations:**
+- `WindowsPrinterService` — current `RawPrinter` (winspool.drv P/Invoke)
+- `CupsPrinterService` (Linux + macOS — same CUPS on both):
+  - Enumerate: `lpstat -a` or HTTP `localhost:631/printers`
+  - Print RAW: `lp -d <printer> -o raw -t "<docName>" -` ← stdin = bytes
+  - Properties: `xdg-open localhost:631/printers/<name>` (CUPS web UI) — unified UX for Linux + macOS
+
+**Critical check:** verify that CUPS `-o raw` actually preserves bytes without transformation. CUPS is known to transform PostScript/PCL by default — for TSPL that breaks the stream. Test on a real TSPL printer + dummy printer before release.
+
+**Recommendation:** shell out initially (simple, reliable, `lp` exists everywhere). P/Invoke `libcups` later if job state control is needed.
+
+**Effort:** 3–5 days + per-OS testing.
+
+#### Layer 4 — Theme + title bar: simplified via Avalonia
+
+Avalonia 11 gives this for free:
+- `Application.Current.RequestedThemeVariant = ThemeVariant.Light/Dark/Default`
+- `TopLevel.PlatformSettings.ColorValues` — system theme detection
+- `Window.ExtendClientAreaToDecorationsHint = true` + custom titlebar for unified dark across all OSes
+- DWM dark on Windows, NSAppearance on macOS, GTK theme on Linux — Avalonia applies it itself
+
+`ThemeService.cs` shrinks to ~10 lines. `WindowChrome.cs` removed.
+
+**Effort:** 1 day (simplification).
+
+#### Layer 5 — File association: IFileAssociationService
+
+**Implementations:**
+- `WindowsFileAssociationService` — current HKCU + SHChangeNotify
+- `LinuxFileAssociationService`:
+  - `~/.local/share/applications/lucky-dragon-print.desktop` (XDG Desktop Entry)
+  - `~/.local/share/mime/packages/lucky-dragon-print.xml` (MIME type `application/x-tspl`)
+  - `update-mime-database` + `xdg-mime default lucky-dragon-print.desktop application/x-tspl`
+- `MacFileAssociationService`:
+  - macOS is statically wired via `Info.plist` `CFBundleDocumentTypes` at `.app` build time
+  - Runtime user-level override via Launch Services API is complex, skip
+  - `RegisterAsync` = no-op + info message: "On macOS the association is set via Finder: right-click → Get Info → Open with"
+
+**Effort:** 2–3 days.
+
+#### Layer 6 — Build matrix: 6 RIDs
+
+| RID | Platform | Binary | Size (expected) |
+|---|---|---|---|
+| `win-x64` | Windows Intel/AMD | `LDPrint.exe` | ~68 MB |
+| `win-arm64` | Windows ARM (Surface Pro X, Snapdragon Win11) | `LDPrint.exe` | ~70 MB |
+| `linux-x64` | Linux Intel/AMD | `LDPrint` (executable) | ~75 MB |
+| `linux-arm64` | Linux ARM (Raspberry Pi 4/5, ARM servers) | `LDPrint` | ~75 MB |
+| `osx-x64` | macOS Intel (legacy) | `LDPrint.app/Contents/MacOS/LDPrint` | ~80 MB |
+| `osx-arm64` | macOS Apple Silicon (M1/M2/M3/M4) | `LDPrint.app/...` | ~75 MB |
+
+**CI** — matrix strategy with 6 RIDs. GitHub Actions runners:
+- `windows-latest` — win-x64 + cross-compile win-arm64
+- `ubuntu-latest` — linux-x64 + cross-compile linux-arm64 (via QEMU or native arm64 runner)
+- `macos-13` (Intel) → osx-x64
+- `macos-14` (Apple Silicon, free for public repos) → osx-arm64
+
+**CI effort:** 1–2 days.
+
+#### Layer 7 — Packaging per OS
+
+**Windows** (v1.0 + additions):
+- Keep `LuckyDragonPrint.iss` for win-x64
+- Duplicate `.iss` for win-arm64 (`ArchitecturesAllowed=arm64`)
+- Or multi-arch installer: one `.iss` with two `[Files]` sections
+
+**Linux:**
+- **`.AppImage`** (primary) — universal, single-file, no install required. `linuxdeploy` + GitHub Action `AppImageCrafters/build-appimage`
+- `.deb` (secondary) — for Debian/Ubuntu via `dotnet-deb` or `dpkg-deb`
+- `.rpm` (later on request) — Fedora/RHEL
+- `.tar.gz` (fallback with instructions)
+
+**macOS:**
+- **`.app` bundle** — standard structure `LDPrint.app/Contents/{MacOS,Resources,Info.plist}`
+- Universal binary (x64+arm64 in one `.app` via `lipo -create`)
+- Wrapped in `.dmg` via `create-dmg` or `hdiutil`
+- Without signing — Gatekeeper shows a warning, document right-click → Open workaround
+
+**Effort:** 2–3 days for AppImage + DMG, +1 day for .deb.
+
+#### Layer 8 — Code signing (deferred to v2.1)
+
+| Platform | Cost | Without signing |
+|---|---|---|
+| Windows (DigiCert/Sectigo standard) | $300–500/year | SmartScreen "Unknown publisher" warning for ~30 days until build reputation. EV cert (~$700+) removes warning immediately |
+| macOS (Apple Developer ID) | $99/year | Gatekeeper blocks. User does right-click → Open or `xattr -d com.apple.quarantine LDPrint.app` |
+| Linux | free | Distro repos sign their packages themselves; AppImage optionally GPG-signed |
+
+**Decision:** v2.0 ships without signing, document workaround in README. Code signing → v2.1 if user complaints arise.
+
+#### v2.0 effort summary
+
+| Layer | Effort |
+|---|---|
+| WPF → Avalonia 11 (UI rewrite) | 1.5–2 weeks |
+| System.Drawing → SkiaSharp (rendering) | 3–5 days |
+| winspool → CUPS abstraction (printing) | 3–5 days |
+| File association cross-platform | 2–3 days |
+| Theme/title bar (simplification) | 1 day |
+| CI matrix expansion (6 RIDs) | 1–2 days |
+| AppImage + DMG packaging | 2–3 days |
+| Per-platform testing | 1–2 days |
+| **v2.0 total** | **4–6 weeks solo** |
+
+Code signing v2.1: +2–3 days + $99–700/year.
+
+#### Additional features in v2.0 (after the port)
+
+- **Watch folder mode** — file appears in folder → automatic print (integration with 1C / ERP / Excel export)
+- **HTTP webhook server** — REST API `POST /print` with JSON job description (for remote printing from Honest Sign webhooks, EDI systems, warehouse systems)
 
 ### v2.x — Beyond
 
