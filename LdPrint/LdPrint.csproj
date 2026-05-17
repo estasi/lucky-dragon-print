@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <LangVersion>12</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <AssemblyName>LDPrint</AssemblyName>
+    <RootNamespace>LdPrint</RootNamespace>
+    <Version>1.0.0</Version>
+    <Company>Lucky Dragon</Company>
+    <Product>Lucky Dragon Print</Product>
+    <AssemblyTitle>Lucky Dragon Print</AssemblyTitle>
+    <Description>Lucky Dragon Print — TSPL print utility for Windows 11 with selective page printing and label preview</Description>
+    <Copyright>2026</Copyright>
+    <NeutralLanguage>en-US</NeutralLanguage>
+
+    <!-- Single-file publish defaults (override on command-line if needed) -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.10" />
+    <!-- Barcode / DataMatrix / QR rendering for visual preview. Core package
+         gives us BarcodeFormat and MultiFormatWriter; we paint the resulting
+         BitMatrix onto a System.Drawing.Bitmap ourselves to avoid the heavy
+         System.Drawing renderer assembly. -->
+    <PackageReference Include="ZXing.Net" Version="0.16.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Bundle the icon so WPF can pull it via pack:// URI as Window.Icon. -->
+    <Resource Include="Assets\AppIcon.ico" />
+    <!-- i18n translations bundled as resources, fetched via pack:// at runtime. -->
+    <Resource Include="Assets\i18n\*.json" />
+    <!-- Theme dictionaries compiled to BAML and loaded by ThemeService via
+         pack:// URI. Listed explicitly so the SDK treats them as Pages. -->
+    <Page Update="Assets\Themes\Light.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Assets\Themes\Dark.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Assets\Themes\Controls.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
+
+</Project>

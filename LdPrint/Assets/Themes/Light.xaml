@@ -1,0 +1,30 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- LDF Light Warm — warm beige surfaces (NOT cold Fluent white) with the
+       same rose-gold accent. Mirrors the Lucky Dragon Flow web portal's
+       light theme so the user feels the same brand identity across tools. -->
+
+  <!-- Surfaces — warm beige, not cold white -->
+  <SolidColorBrush x:Key="BackgroundBrush" Color="#FDFCFA"/>
+  <SolidColorBrush x:Key="SurfaceBrush"    Color="#F5F2ED"/>
+  <SolidColorBrush x:Key="ElevatedBrush"   Color="#EDEAE4"/>
+  <SolidColorBrush x:Key="BorderBrush"     Color="#D7D2CB"/>
+
+  <!-- Text — warm black, not absolute black -->
+  <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1A1814"/>
+  <SolidColorBrush x:Key="TextMutedBrush"   Color="#5A5650"/>
+
+  <!-- Accent: same rose gold across both themes — single brand identity -->
+  <SolidColorBrush x:Key="AccentBrush"           Color="#C49A7A"/>
+  <SolidColorBrush x:Key="AccentForegroundBrush" Color="#FFFFFF"/>
+
+  <!-- Semantic -->
+  <SolidColorBrush x:Key="DangerBrush" Color="#B83030"/>
+
+  <!-- Preview backdrop — medium warm grey behind the paper so the label
+       reads as a distinct object on a desk. -->
+  <SolidColorBrush x:Key="PreviewBackgroundBrush" Color="#CFCAC2"/>
+
+  <!-- Backwards-compat aliases -->
+  <SolidColorBrush x:Key="MutedBrush" Color="#5A5650"/>
+</ResourceDictionary>

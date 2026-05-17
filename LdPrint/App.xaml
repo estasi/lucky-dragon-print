@@ -1,0 +1,17 @@
+<Application x:Class="LdPrint.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <!-- Default theme slot. ThemeService swaps this entry at startup
+             and whenever the user / system theme changes. -->
+        <ResourceDictionary Source="pack://application:,,,/Assets/Themes/Light.xaml"/>
+        <!-- Implicit styles for Button/ComboBox/TextBox/ListBox; references
+             DynamicResource brushes from the active theme above. Never
+             swapped. -->
+        <ResourceDictionary Source="pack://application:,,,/Assets/Themes/Controls.xaml"/>
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+</Application>
