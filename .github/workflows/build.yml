@@ -1,0 +1,42 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.x
+
+      - name: Restore
+        run: dotnet restore LdPrint/LdPrint.csproj
+
+      - name: Build
+        run: dotnet build LdPrint/LdPrint.csproj --configuration Release --no-restore
+
+      - name: Publish single-file
+        run: |
+          dotnet publish LdPrint/LdPrint.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            --output publish
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LDPrint-exe-${{ github.sha }}
+          path: publish/LDPrint.exe
+          retention-days: 14
