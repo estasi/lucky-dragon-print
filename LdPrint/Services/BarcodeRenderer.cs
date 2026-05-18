@@ -107,13 +107,63 @@ public static class BarcodeRenderer
                 [EncodeHintType.MARGIN] = 0,
                 [EncodeHintType.DATA_MATRIX_SHAPE] = SymbolShapeHint.FORCE_SQUARE,
             };
-            var matrix = writer.encode(content, BarcodeFormat.DATA_MATRIX, width, height, hints);
-            return PaintMatrix(matrix, width, height, null);
+            // Encode at natural module size (1×1 forces ZXing's
+            // convertByteMatrixToBitMatrix to skip integer-multiple
+            // padding — `multiple` collapses to 1 and the returned
+            // matrix is the raw natural module grid).
+            //
+            // Why not pass requested `width × height` directly: ZXing
+            // pads with whitespace when `width / naturalModules` doesn't
+            // divide evenly. Different GS1 payloads (varying (91)Key /
+            // (92)Sig lengths) yield different natural module counts
+            // (e.g. 24×24 vs 26×26) → different padding → DM appears
+            // visually larger or smaller in the same bounding box.
+            // Float-scaling here guarantees the symbol always fills the
+            // requested rectangle regardless of natural module count.
+            var matrix = writer.encode(content, BarcodeFormat.DATA_MATRIX, 1, 1, hints);
+            return PaintMatrixStretched(matrix, width, height);
         }
         catch
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Paint a BitMatrix to a Bitmap of exactly <paramref name="requestedW"/>×<paramref name="requestedH"/>
+    /// pixels using float scaling. Each natural module spans
+    /// <c>requestedW / matrix.Width</c> pixels horizontally (likewise
+    /// vertically); fractional edges resolve via <see cref="Math.Round(double)"/>
+    /// so adjacent modules tile without gaps. Used by DataMatrix to
+    /// avoid ZXing's integer-multiple padding (see <see cref="RenderDataMatrix"/>).
+    /// </summary>
+    private static Bitmap PaintMatrixStretched(BitMatrix matrix, int requestedW, int requestedH)
+    {
+        var moduleW = matrix.Width;
+        var moduleH = matrix.Height;
+        var bmp = new Bitmap(requestedW, requestedH, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = SmoothingMode.None;
+        g.PixelOffsetMode = PixelOffsetMode.Half;
+        g.Clear(Color.White);
+        using var brush = new SolidBrush(Color.Black);
+
+        var scaleX = requestedW / (double)moduleW;
+        var scaleY = requestedH / (double)moduleH;
+
+        for (var y = 0; y < moduleH; y++)
+        {
+            for (var x = 0; x < moduleW; x++)
+            {
+                if (!matrix[x, y]) continue;
+                var rx = (int)Math.Round(x * scaleX);
+                var ry = (int)Math.Round(y * scaleY);
+                var rw = Math.Max(1, (int)Math.Round((x + 1) * scaleX) - rx);
+                var rh = Math.Max(1, (int)Math.Round((y + 1) * scaleY) - ry);
+                g.FillRectangle(brush, rx, ry, rw, rh);
+            }
+        }
+        return bmp;
     }
 
     public static Bitmap? RenderQrCode(string content, int width, int height)

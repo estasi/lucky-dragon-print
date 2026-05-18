@@ -1,10 +1,10 @@
 ; Inno Setup 6 script — Lucky Dragon Print installer
 ; Compile:  ISCC.exe installer\LuckyDragonPrint.iss
-; Output:   installer\Output\LuckyDragonPrint-Setup-1.0.0.exe
+; Output:   installer\Output\LuckyDragonPrint-Setup-1.0.1.exe
 
 #define MyAppName        "Lucky Dragon Print"
 #define MyAppShortName   "LDPrint"
-#define MyAppVersion     "1.0.0"
+#define MyAppVersion     "1.0.1"
 #define MyAppPublisher   "Lucky Dragon"
 #define MyAppURL         "https://flow.lucky-dragon.ru/"
 #define MyAppExeName     "LDPrint.exe"

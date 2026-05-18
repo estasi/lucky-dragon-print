@@ -2,6 +2,12 @@
 
 All notable changes to Lucky Dragon Print are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] — 2026-05-18
+
+### Fixed
+
+- **DataMatrix preview size now consistent across pages.** ZXing's built-in scaling used integer-multiple module sizing (`floor(reqWidth / naturalModules)`), centring the symbol with white padding. Different GS1 payloads (varying `(91)Key` / `(92)Sig` lengths) produced different natural module counts (e.g. 24×24 vs 26×26) → different padding → visually smaller or larger DataMatrix in the same bounding box. The renderer now encodes at natural module size and float-scales to fill the requested rectangle exactly, so every page in a multi-page `.tspl` displays the symbol at the same visual size. Affects: visual preview only — printer output was already correct (printer firmware computes its own module width independently of the preview).
+
 ## [1.0.0] — 2026-05-17
 
 Initial public release.
@@ -72,4 +78,5 @@ Initial public release.
 - ARM64 Windows users — runs via x64 emulation only. Native ARM64 build planned for v2.0.
 - macOS and Linux not supported — WPF is Windows-only. Cross-platform Avalonia rewrite planned for v2.0.
 
+[1.0.1]: https://github.com/estasi/lucky-dragon-print/releases/tag/v1.0.1
 [1.0.0]: https://github.com/estasi/lucky-dragon-print/releases/tag/v1.0.0
